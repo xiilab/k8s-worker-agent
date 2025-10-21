@@ -1,0 +1,57 @@
+# K8s VPN Agent Configuration File
+# 이 파일을 복사하여 config.yaml로 사용하세요
+
+# 마스터 노드 설정
+master:
+  ip: "10.0.1.100"  # 마스터 노드 IP (VPN 사용 시 VPN IP)
+  hostname: "k8s-master"
+  api_endpoint: "https://10.0.1.100:6443"
+  token: ""  # kubeadm token (마스터에서 생성: kubeadm token create)
+  ca_cert_hash: ""  # CA 인증서 해시 (sha256:xxxxx 형식)
+
+# VPN 설정
+vpn:
+  enabled: true  # VPN 사용 여부 (false면 직접 통신)
+  type: "headscale"  # headscale 또는 tailscale
+  headscale_url: "https://headscale.example.com"
+  auth_key: ""  # Headscale Pre-auth key
+  namespace: "default"
+
+# 워커 노드 설정
+worker:
+  hostname: ""  # 비워두면 자동 생성
+  labels:
+    - "network=vpn"
+    - "zone=remote"
+  taints: []  # 예: ["dedicated=special:NoSchedule"]
+
+# 네트워크 설정
+network:
+  pod_cidr: "10.244.0.0/16"
+  service_cidr: "10.96.0.0/12"
+  dns_domain: "cluster.local"
+
+# 방화벽 설정
+firewall:
+  enabled: true
+  vpn_port: 41641  # Tailscale/Headscale
+  k8s_api_port: 6443
+  kubelet_port: 10250
+  nodeport_range: "30000-32767"
+  additional_ports: []
+
+# 에이전트 설정
+agent:
+  log_dir: "/var/log/k8s-vpn-agent"
+  log_level: "INFO"  # DEBUG, INFO, WARN, ERROR
+  health_check_interval: 30
+  auto_reconnect: true
+  max_retry: 5
+  rollback_on_failure: true
+  idempotent: true
+
+# 컨테이너 런타임
+runtime:
+  type: "containerd"
+  version: "latest"
+

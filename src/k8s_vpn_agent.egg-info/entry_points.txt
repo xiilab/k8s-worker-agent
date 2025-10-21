@@ -1,0 +1,2 @@
+[console_scripts]
+k8s-vpn-agent = k8s_vpn_agent.cli:main
