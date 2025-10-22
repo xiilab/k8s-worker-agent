@@ -85,7 +85,7 @@ class K8sManager:
         console.print("\n[cyan]Kubernetes 구성요소 확인 중...[/cyan]\n")
         self.logger.info("Checking K8s dependencies...")
         
-        dependencies = ["kubeadm", "kubelet", "kubectl", "containerd"]
+        dependencies = ["kubeadm", "kubelet", "crio"]
         missing = []
         
         for dep in dependencies:
@@ -96,12 +96,21 @@ class K8sManager:
             
             if result.returncode == 0:
                 try:
-                    version_result = subprocess.run(
-                        [dep, "--version"] if dep != "containerd" else ["containerd", "--version"],
-                        capture_output=True,
-                        text=True
-                    )
-                    version = version_result.stdout.strip().split('\n')[0]
+                    if dep == "crio":
+                        # CRI-O는 crio --version으로 확인
+                        version_result = subprocess.run(
+                            ["crio", "--version"],
+                            capture_output=True,
+                            text=True
+                        )
+                        version = version_result.stdout.strip().split('\n')[0]
+                    else:
+                        version_result = subprocess.run(
+                            [dep, "--version"],
+                            capture_output=True,
+                            text=True
+                        )
+                        version = version_result.stdout.strip().split('\n')[0]
                     console.print(f"  [green]✓[/green] {dep}: {version}")
                     self.logger.debug(f"{dep}: {version}")
                 except:
@@ -262,15 +271,8 @@ class K8sManager:
             "--discovery-token-ca-cert-hash", self.ca_cert_hash
         ]
         
-        # 노드 레이블 추가
-        if self.node_labels:
-            for label in self.node_labels:
-                join_cmd.extend(["--node-labels", label])
-        
-        # 노드 테인트 추가
-        if self.node_taints:
-            taints_str = ",".join(self.node_taints)
-            join_cmd.extend(["--register-with-taints", taints_str])
+        # 참고: kubeadm join은 --node-labels를 지원하지 않음
+        # 레이블과 테인트는 조인 후 kubectl로 추가
         
         console.print(f"[cyan]Join 명령어 실행 중...[/cyan]")
         self.logger.info(f"Executing join command: {' '.join(join_cmd)}")
@@ -280,7 +282,7 @@ class K8sManager:
                 join_cmd,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=300
             )
             
             if result.returncode == 0:
@@ -306,18 +308,42 @@ class K8sManager:
                     console.print("[yellow]⚠ Kubelet 상태 확인 필요[/yellow]")
                     self.logger.warning("Kubelet status check needed")
                 
+                # 노드 레이블 추가 (조인 후)
+                if self.node_labels:
+                    self._apply_node_labels()
+                
+                # 노드 테인트 추가 (조인 후)
+                if self.node_taints:
+                    self._apply_node_taints()
+                
                 return True, "조인 완료"
             else:
                 console.print("[bold red]✗ 클러스터 조인 실패[/bold red]\n")
                 console.print(result.stderr)
                 self.logger.error(f"Cluster join failed: {result.stderr}")
                 
-                # 일반적인 오류 원인 안내
-                console.print("\n[yellow]다음 사항을 확인하세요:[/yellow]")
-                console.print("  1. 토큰이 유효한지 확인 (마스터에서 'kubeadm token list')")
-                console.print("  2. CA 인증서 해시가 올바른지 확인")
-                console.print("  3. 마스터 노드 API 서버에 접근 가능한지 확인")
-                console.print("  4. 방화벽 설정 확인 (6443, 10250 포트)")
+                # 에러 타입별 맞춤 안내
+                error_msg = result.stderr.lower()
+                
+                if "cannot unmarshal array" in error_msg and "extraargs" in error_msg:
+                    console.print("\n[bold red]⚠️  마스터 노드 설정 오류 감지![/bold red]")
+                    console.print("\n[yellow]마스터 노드에서 다음을 실행하세요:[/yellow]")
+                    console.print("  1. kubectl edit cm kubeadm-config -n kube-system")
+                    console.print("  2. apiServer.extraArgs를 배열에서 맵으로 변경:")
+                    console.print("     [red]잘못됨:[/red]")
+                    console.print("       extraArgs:")
+                    console.print("         - arg1=value1")
+                    console.print("     [green]올바름:[/green]")
+                    console.print("       extraArgs:")
+                    console.print("         arg1: \"value1\"")
+                    console.print("  3. 저장 후 워커 노드에서 재시도")
+                else:
+                    # 일반적인 오류 원인 안내
+                    console.print("\n[yellow]다음 사항을 확인하세요:[/yellow]")
+                    console.print("  1. 토큰이 유효한지 확인 (마스터에서 'kubeadm token list')")
+                    console.print("  2. CA 인증서 해시가 올바른지 확인")
+                    console.print("  3. 마스터 노드 API 서버에 접근 가능한지 확인")
+                    console.print("  4. 방화벽 설정 확인 (6443, 10250 포트)")
                 
                 return False, result.stderr
         
@@ -329,6 +355,67 @@ class K8sManager:
             error_msg = f"조인 오류: {str(e)}"
             self.logger.exception(error_msg)
             return False, error_msg
+    
+    def _apply_node_labels(self):
+        """노드에 레이블 추가"""
+        console.print("\n[cyan]노드 레이블 추가 중...[/cyan]")
+        self.logger.info("Applying node labels...")
+        
+        hostname = socket.gethostname()
+        
+        try:
+            # 노드가 Ready 될 때까지 대기 (최대 60초)
+            for i in range(12):
+                check_result = subprocess.run(
+                    ["kubectl", "get", "node", hostname, "-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}"],
+                    capture_output=True,
+                    text=True
+                )
+                if check_result.stdout.strip() == "True":
+                    break
+                console.print(f"  노드 Ready 대기 중... ({(i+1)*5}초)")
+                time.sleep(5)
+            
+            # 레이블 추가
+            for label in self.node_labels:
+                result = subprocess.run(
+                    ["kubectl", "label", "node", hostname, label, "--overwrite"],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0:
+                    console.print(f"  [green]✓[/green] 레이블 추가: {label}")
+                    self.logger.info(f"Label applied: {label}")
+                else:
+                    console.print(f"  [yellow]⚠[/yellow] 레이블 추가 실패: {label}")
+                    self.logger.warning(f"Failed to apply label: {label}")
+        except Exception as e:
+            console.print(f"[yellow]⚠ 레이블 추가 중 오류: {e}[/yellow]")
+            self.logger.warning(f"Error applying labels: {e}")
+    
+    def _apply_node_taints(self):
+        """노드에 테인트 추가"""
+        console.print("\n[cyan]노드 테인트 추가 중...[/cyan]")
+        self.logger.info("Applying node taints...")
+        
+        hostname = socket.gethostname()
+        
+        try:
+            for taint in self.node_taints:
+                result = subprocess.run(
+                    ["kubectl", "taint", "node", hostname, taint, "--overwrite"],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0:
+                    console.print(f"  [green]✓[/green] 테인트 추가: {taint}")
+                    self.logger.info(f"Taint applied: {taint}")
+                else:
+                    console.print(f"  [yellow]⚠[/yellow] 테인트 추가 실패: {taint}")
+                    self.logger.warning(f"Failed to apply taint: {taint}")
+        except Exception as e:
+            console.print(f"[yellow]⚠ 테인트 추가 중 오류: {e}[/yellow]")
+            self.logger.warning(f"Error applying taints: {e}")
     
     def verify_node_status(self) -> Dict:
         """노드 상태 확인"""

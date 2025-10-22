@@ -108,12 +108,13 @@ cri-o-runc
 ### 4. Kubernetes 도구
 
 ```
-kubeadm  (1.28.x)
-kubelet  (1.28.x)
-kubectl  (1.28.x)
+kubeadm  (1.30.x) - 클러스터 조인용
+kubelet  (1.30.x) - 워커 노드 필수
 ```
 
-**저장소**: https://pkgs.k8s.io/core:/stable:/v1.28/
+**저장소**: https://pkgs.k8s.io/core:/stable:/v1.30/
+
+**참고**: kubectl은 마스터 노드 전용이며 워커 노드에는 불필요합니다.
 
 ### 5. VPN 클라이언트
 
@@ -319,17 +320,17 @@ sudo systemctl enable containerd
 #### 3. Kubernetes 도구
 ```bash
 # 저장소 추가
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | \
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | \
   sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] \
-  https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /" | \
+  https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | \
   sudo tee /etc/apt/sources.list.d/kubernetes.list
 
-# 설치
+# 설치 (워커 노드)
 sudo apt update
-sudo apt install -y kubelet kubeadm kubectl
-sudo apt-mark hold kubelet kubeadm kubectl
+sudo apt install -y kubelet kubeadm
+sudo apt-mark hold kubelet kubeadm
 ```
 
 #### 4. 시스템 설정
@@ -388,14 +389,14 @@ sudo systemctl enable containerd
 cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v1.28/rpm/
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/
 enabled=1
 gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v1.28/rpm/repodata/repomd.xml.key
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/repodata/repomd.xml.key
 EOF
 
-# 설치
-sudo yum install -y kubelet kubeadm kubectl
+# 설치 (워커 노드)
+sudo yum install -y kubelet kubeadm
 sudo systemctl enable kubelet
 ```
 
@@ -423,10 +424,9 @@ python3 --version
 # Containerd
 containerd --version
 
-# Kubernetes 도구
+# Kubernetes 도구 (워커 노드)
 kubeadm version
 kubelet --version
-kubectl version --client
 
 # Tailscale (VPN 사용 시)
 tailscale version

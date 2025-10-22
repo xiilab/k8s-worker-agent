@@ -5,6 +5,20 @@
 
 set -e
 
+# ================================================================
+# 설정 (여기를 수정하세요)
+# ================================================================
+# 토큰 발급 방법: docs/TOKEN_GUIDE.md 참고
+# 마스터 노드에서: kubeadm token create --print-join-command
+# ================================================================
+MASTER_IP="10.61.3.12"
+JOIN_TOKEN="yzb9u7.lvd03ttigav26zxv"
+CA_CERT_HASH="sha256:8b684de8ec14e8da526b52e4d3e3f2490cbc42a9ec6be45b51bbb4631e67b9d8"
+VPN_ENABLED="false"  # VPN 사용 여부: true 또는 false
+HEADSCALE_URL=""  # VPN 사용 시: https://headscale.example.com
+HEADSCALE_KEY=""  # VPN 사용 시: Pre-auth key
+# ================================================================
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -27,6 +41,19 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "1️⃣  시스템 의존성 설치"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
+echo "시스템 의존성 설치를 시작합니다."
+echo "  • CRI-O 컨테이너 런타임"
+echo "  • Kubernetes 도구 (kubeadm, kubelet, kubectl)"
+echo "  • 네트워크 도구"
+echo ""
+read -p "계속하시겠습니까? (y/N): " INSTALL_DEPS
+echo ""
+
+if [[ ! "$INSTALL_DEPS" =~ ^[Yy]$ ]]; then
+    echo "❌ 시스템 의존성 설치를 건너뛰었습니다."
+    echo "   수동으로 설치하려면: sudo ./scripts/install-dependencies.sh"
+    exit 0
+fi
 
 if [ -f "$SCRIPT_DIR/scripts/install-dependencies.sh" ]; then
     bash "$SCRIPT_DIR/scripts/install-dependencies.sh"
@@ -56,52 +83,43 @@ echo ""
 echo "✅ Python 에이전트 설치 완료"
 echo ""
 
-# 3단계: 설정 파일 확인
+# 3단계: 설정 파일 생성
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "3️⃣  설정 파일 확인"
+echo "3️⃣  설정 파일 생성"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 CONFIG_FILE="$SCRIPT_DIR/config/config.yaml"
 
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "⚠️  설정 파일이 없습니다. 샘플에서 복사합니다..."
-    cp "$SCRIPT_DIR/config/config.yaml.sample" "$CONFIG_FILE"
-    echo "✅ config.yaml 파일이 생성되었습니다."
+# 토큰 검증 (선택사항 - 이미 올바른 토큰이 설정되어 있음)
+# if [ "$JOIN_TOKEN" == "예시토큰" ]; then
+#     echo "❌ 오류: 토큰이 예시 값입니다!"
+#     exit 1
+# fi
+
+if [ -f "$CONFIG_FILE" ]; then
+    echo "⚠️  설정 파일이 이미 존재합니다: $CONFIG_FILE"
     echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "⚠️  설정 파일을 편집해야 합니다!"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    read -p "기존 파일을 덮어쓰시겠습니까? (y/N): " OVERWRITE
     echo ""
-    echo "필수 정보를 입력하세요:"
-    echo ""
-    
-    # 마스터 노드 IP
-    read -p "📌 마스터 노드 IP: " MASTER_IP
-    
-    # 조인 토큰
-    echo ""
-    echo "💡 마스터 노드에서 다음 명령을 실행하세요:"
-    echo "   kubeadm token create --print-join-command"
-    echo ""
-    read -p "📌 조인 토큰: " JOIN_TOKEN
-    
-    # CA 인증서 해시
-    read -p "📌 CA 인증서 해시 (sha256:...): " CA_HASH
-    
-    # VPN 사용 여부
-    echo ""
-    read -p "🔒 VPN을 사용하시겠습니까? (y/N): " USE_VPN
-    
-    VPN_ENABLED="false"
-    VPN_URL=""
-    VPN_KEY=""
-    
-    if [[ "$USE_VPN" =~ ^[Yy]$ ]]; then
-        VPN_ENABLED="true"
-        read -p "📌 Headscale 서버 URL: " VPN_URL
-        read -p "📌 Pre-auth Key: " VPN_KEY
+    if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
+        echo "✅ 기존 설정 파일을 사용합니다."
+        echo ""
+    else
+        rm "$CONFIG_FILE"
+        echo "✅ 기존 파일을 삭제했습니다."
+        echo ""
     fi
+fi
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "📝 설정 파일을 생성합니다..."
+    echo ""
+    echo "  • 마스터 IP: $MASTER_IP"
+    echo "  • 조인 토큰: ${JOIN_TOKEN:0:6}.***************"
+    echo "  • CA 해시: ${CA_CERT_HASH:0:13}***"
+    echo "  • VPN 사용: $VPN_ENABLED"
+    echo ""
     
     # 설정 파일 생성
     cat > "$CONFIG_FILE" <<EOF
@@ -110,50 +128,55 @@ if [ ! -f "$CONFIG_FILE" ]; then
 
 master:
   ip: "${MASTER_IP}"
+  hostname: "k8s-master"
   api_endpoint: "https://${MASTER_IP}:6443"
   token: "${JOIN_TOKEN}"
-  ca_cert_hash: "${CA_HASH}"
+  ca_cert_hash: "${CA_CERT_HASH}"
 
 vpn:
   enabled: ${VPN_ENABLED}
   type: "headscale"
-  server_url: "${VPN_URL}"
-  auth_key: "${VPN_KEY}"
-
-firewall:
-  enabled: true
-  rules:
-    - port: 6443
-      protocol: tcp
-      description: "Kubernetes API"
-    - port: 10250
-      protocol: tcp
-      description: "Kubelet API"
-    - port: 30000-32767
-      protocol: tcp
-      description: "NodePort Services"
-    - port: 41641
-      protocol: udp
-      description: "Tailscale VPN"
+  headscale_url: "${HEADSCALE_URL}"
+  auth_key: "${HEADSCALE_KEY}"
+  namespace: "default"
 
 worker:
   hostname: "$(hostname)"
-  labels: []
+  labels:
+    - "network=vpn"
+    - "zone=remote"
   taints: []
 
+network:
+  pod_cidr: "10.244.0.0/16"
+  service_cidr: "10.96.0.0/12"
+  dns_domain: "cluster.local"
+
+firewall:
+  enabled: true
+  vpn_port: 41641
+  k8s_api_port: 6443
+  kubelet_port: 10250
+  nodeport_range: "30000-32767"
+  additional_ports: []
+
 agent:
-  log_level: "INFO"
   log_dir: "/var/log/k8s-vpn-agent"
+  log_level: "INFO"
+  health_check_interval: 30
+  auto_reconnect: true
+  max_retry: 5
   rollback_on_failure: true
+  idempotent: true
+
+runtime:
+  type: "crio"
+  version: "latest"
 EOF
     
-    echo ""
     echo "✅ 설정 파일이 생성되었습니다: $CONFIG_FILE"
-else
-    echo "✅ 설정 파일이 이미 존재합니다: $CONFIG_FILE"
+    echo ""
 fi
-
-echo ""
 
 # 4단계: 설정 검증
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

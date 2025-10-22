@@ -20,7 +20,7 @@ from typing import Dict, List, Optional
 from pathlib import Path
 
 from .logger import get_logger
-from .network import NetworkManager
+from .network import NetworkChecker
 
 
 class HealthChecker:
@@ -36,7 +36,7 @@ class HealthChecker:
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.logger = get_logger(__name__)
-        self.network_mgr = NetworkManager()
+        self.network_mgr = NetworkChecker()
         
     def check_all(self) -> Dict:
         """모든 헬스체크 수행
@@ -204,16 +204,16 @@ class HealthChecker:
                 "message": str(e)
             }
     
-    def check_containerd_status(self) -> Dict:
-        """Containerd 서비스 상태 확인
+    def check_crio_status(self) -> Dict:
+        """CRI-O 서비스 상태 확인
         
         Returns:
-            Dict: Containerd 상태 정보
+            Dict: CRI-O 상태 정보
         """
         try:
-            # systemctl status containerd
+            # systemctl status crio
             result = subprocess.run(
-                ["systemctl", "is-active", "containerd"],
+                ["systemctl", "is-active", "crio"],
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -221,15 +221,15 @@ class HealthChecker:
             
             is_active = result.returncode == 0 and result.stdout.strip() == "active"
             
-            # 추가 정보: containerd 버전
+            # 추가 정보: crio 버전
             if is_active:
                 version_result = subprocess.run(
-                    ["containerd", "--version"],
+                    ["crio", "--version"],
                     capture_output=True,
                     text=True,
                     timeout=5
                 )
-                version = version_result.stdout.strip() if version_result.returncode == 0 else "unknown"
+                version = version_result.stdout.strip().split('\n')[0] if version_result.returncode == 0 else "unknown"
             else:
                 version = "unknown"
             
@@ -237,16 +237,20 @@ class HealthChecker:
                 "healthy": is_active,
                 "status": "active" if is_active else "inactive",
                 "version": version,
-                "message": "Containerd 정상 작동" if is_active else "Containerd가 실행되지 않음"
+                "message": "CRI-O 정상 작동" if is_active else "CRI-O가 실행되지 않음"
             }
             
         except Exception as e:
-            self.logger.error(f"Containerd 상태 확인 중 오류: {e}")
+            self.logger.error(f"CRI-O 상태 확인 중 오류: {e}")
             return {
                 "healthy": False,
                 "status": "error",
                 "message": str(e)
             }
+    
+    def check_containerd_status(self) -> Dict:
+        """하위 호환성을 위한 래퍼 - CRI-O 상태 확인"""
+        return self.check_crio_status()
     
     def check_node_ready_status(self) -> Dict:
         """Kubernetes 노드 Ready 상태 확인

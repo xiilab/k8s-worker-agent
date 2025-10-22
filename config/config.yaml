@@ -1,0 +1,49 @@
+# K8s VPN Agent 설정 파일
+# 자동 생성: Tue Oct 21 11:16:58 AM UTC 2025
+
+master:
+  ip: "10.61.3.12"
+  hostname: "k8s-master"
+  api_endpoint: "https://10.61.3.12:6443"
+  token: "yzb9u7.lvd03ttigav26zxv"
+  ca_cert_hash: "sha256:8b684de8ec14e8da526b52e4d3e3f2490cbc42a9ec6be45b51bbb4631e67b9d8"
+
+vpn:
+  enabled: false
+  type: "headscale"
+  headscale_url: ""
+  auth_key: ""
+  namespace: "default"
+
+worker:
+  hostname: "master1"
+  labels:
+    - "network=vpn"
+    - "zone=remote"
+  taints: []
+
+network:
+  pod_cidr: "10.244.0.0/16"
+  service_cidr: "10.96.0.0/12"
+  dns_domain: "cluster.local"
+
+firewall:
+  enabled: true
+  vpn_port: 41641
+  k8s_api_port: 6443
+  kubelet_port: 10250
+  nodeport_range: "30000-32767"
+  additional_ports: []
+
+agent:
+  log_dir: "/var/log/k8s-vpn-agent"
+  log_level: "INFO"
+  health_check_interval: 30
+  auto_reconnect: true
+  max_retry: 5
+  rollback_on_failure: true
+  idempotent: true
+
+runtime:
+  type: "crio"
+  version: "latest"

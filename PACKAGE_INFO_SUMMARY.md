@@ -82,9 +82,8 @@
   - Containerd (Docker 저장소에서)
 
 【Kubernetes 도구】
-  - kubeadm v1.28.x
-  - kubelet v1.28.x
-  - kubectl v1.28.x
+  - kubeadm v1.30.x (조인용)
+  - kubelet v1.30.x (필수)
 
 【VPN 클라이언트】
   - Tailscale (에이전트 실행 시 자동 설치)
@@ -111,9 +110,8 @@
 - net-tools, ipset, ipvsadm, socat, conntrack
 
 **Kubernetes**:
-- kubeadm v1.28.x
-- kubelet v1.28.x
-- kubectl v1.28.x
+- kubeadm v1.30.x (조인용)
+- kubelet v1.30.x (필수)
 
 **컨테이너 런타임**:
 - Containerd (Docker 저장소)

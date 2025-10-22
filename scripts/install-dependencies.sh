@@ -153,7 +153,7 @@ install_crio() {
     log_step "CRI-O 설치 중..."
     
     # Kubernetes 버전에 맞는 CRI-O 버전
-    CRIO_VERSION="1.28"
+    CRIO_VERSION="1.30"
     
     if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
         # GPG 키 먼저 다운로드 (만료된 키 문제 해결)
@@ -166,19 +166,20 @@ install_crio() {
         curl -fsSL https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/${CRIO_VERSION}/xUbuntu_$(lsb_release -rs)/Release.key | \
             gpg --dearmor -o /usr/share/keyrings/libcontainers-crio-archive-keyring.gpg
         
-        # CRI-O 저장소 추가
-        echo "deb [signed-by=/usr/share/keyrings/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_$(lsb_release -rs)/ /" | \
+        # CRI-O 저장소 추가 (GPG 키 검증 없이 - trusted=yes 옵션)
+        echo "deb [trusted=yes] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_$(lsb_release -rs)/ /" | \
             tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
         
-        echo "deb [signed-by=/usr/share/keyrings/libcontainers-crio-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/${CRIO_VERSION}/xUbuntu_$(lsb_release -rs)/ /" | \
+        echo "deb [trusted=yes] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/${CRIO_VERSION}/xUbuntu_$(lsb_release -rs)/ /" | \
             tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:${CRIO_VERSION}.list
         
-        # GPG 키가 만료되었을 경우를 대비한 옵션 추가
-        apt-get update --allow-insecure-repositories 2>/dev/null || apt-get update
+        log_info "CRI-O 저장소 추가 완료 (GPG 키 검증 비활성화)"
         
-        # CRI-O 설치 (키 검증 경고 무시)
-        apt-get install -y --allow-unauthenticated cri-o cri-o-runc || \
-        apt-get install -y -o APT::Get::AllowUnauthenticated=true cri-o cri-o-runc
+        # apt 업데이트
+        apt-get update
+        
+        # CRI-O 설치
+        apt-get install -y cri-o cri-o-runc
         
     elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]]; then
         OS_VERSION=$(rpm -E %rhel)
@@ -273,15 +274,17 @@ install_kubernetes_tools() {
         return
     fi
     
-    K8S_VERSION="1.28"
+    K8S_VERSION="1.30"
     
     if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+        # 기존 키 파일 강제 삭제
+        rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
         curl -fsSL https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
         echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
         
         apt-get update
-        apt-get install -y kubelet kubeadm kubectl
-        apt-mark hold kubelet kubeadm kubectl
+        apt-get install -y kubelet kubeadm
+        apt-mark hold kubelet kubeadm
     elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]]; then
         cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
@@ -292,7 +295,7 @@ gpgcheck=1
 gpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/repodata/repomd.xml.key
 EOF
         
-        yum install -y kubelet kubeadm kubectl
+        yum install -y kubelet kubeadm
     elif [[ "$OS" == "fedora" ]]; then
         cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
@@ -303,7 +306,7 @@ gpgcheck=1
 gpgkey=https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/rpm/repodata/repomd.xml.key
 EOF
         
-        dnf install -y kubelet kubeadm kubectl
+        dnf install -y kubelet kubeadm
     fi
     
     systemctl enable kubelet
@@ -374,12 +377,6 @@ verify_installation() {
         errors=$((errors + 1))
     fi
     
-    if command -v kubectl &> /dev/null; then
-        log_info "✓ kubectl: $(kubectl version --client -o json 2>/dev/null | jq -r '.clientVersion.gitVersion')"
-    else
-        log_error "✗ kubectl이 설치되지 않았습니다."
-        errors=$((errors + 1))
-    fi
     
     if command -v python3 &> /dev/null; then
         log_info "✓ Python3: $(python3 --version)"
@@ -410,9 +407,8 @@ show_packages() {
     echo "  - CRI-O (컨테이너 런타임)"
     echo ""
     echo "【Kubernetes 도구】"
-    echo "  - kubeadm v1.28.x"
-    echo "  - kubelet v1.28.x"
-    echo "  - kubectl v1.28.x"
+    echo "  - kubeadm v1.30.x"
+    echo "  - kubelet v1.30.x"
     echo ""
     echo "【VPN 클라이언트】"
     echo "  - Tailscale (에이전트 실행 시 자동 설치)"

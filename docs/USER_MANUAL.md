@@ -40,9 +40,8 @@ K8s VPN Agent는 서로 다른 네트워크망에 있는 워커노드를 Kuberne
 - Python 3.8+ (python3, python3-pip, python3-venv)
 
 **Kubernetes 도구**:
-- kubeadm v1.28.x
-- kubelet v1.28.x
-- kubectl v1.28.x
+- kubeadm v1.30.x (조인용)
+- kubelet v1.30.x (필수)
 
 **컨테이너 런타임**:
 - Containerd (Docker 저장소)

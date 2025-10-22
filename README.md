@@ -57,19 +57,66 @@
 - net-tools, ipset, ipvsadm, socat, conntrack
 
 **Kubernetes**:
-- kubeadm v1.28.x
-- kubelet v1.28.x
-- kubectl v1.28.x
+- kubeadm v1.30.x (조인용)
+- kubelet v1.30.x (필수)
 
 **컨테이너 런타임**:
-- CRI-O v1.28.x (Kubelet과 자동 연동)
+- CRI-O v1.30.x (Kubelet과 자동 연동)
 
 **VPN**:
 - Tailscale/Headscale (에이전트 실행 시 자동 설치)
 
 **상세 패키지 정보**: [docs/PREREQUISITES.md](docs/PREREQUISITES.md)
 
+## 빠른 시작 ⚡
+
+### 방법 1: 원클릭 설치 (권장)
+
+**1. 마스터 노드에서 토큰 발급**
+
+```bash
+# 마스터 노드에서 실행
+kubeadm token create --print-join-command
+```
+
+**2. 워커 노드에서 스크립트 편집 및 실행**
+
+```bash
+cd /root/k8s-vpn-agent
+vi quick-setup.sh  # 상단의 MASTER_IP, JOIN_TOKEN, CA_CERT_HASH를 수정
+sudo ./quick-setup.sh
+```
+
+**끝! 🎉** 자세한 내용: [QUICKSTART.md](QUICKSTART.md)
+
+---
+
 ## 설치 방법
+
+### ⚠️ 시작하기 전에: 토큰 발급
+
+**반드시 마스터 노드에서 먼저 토큰을 발급받으세요!**
+
+마스터 노드에서 실행:
+
+```bash
+kubeadm token create --print-join-command
+```
+
+출력 예시:
+```
+kubeadm join 10.0.1.100:6443 --token abcdef.0123456789abcdef \
+    --discovery-token-ca-cert-hash sha256:1234567890abcdef...
+```
+
+여기서:
+- **마스터 IP**: `10.0.1.100`
+- **토큰**: `abcdef.0123456789abcdef`
+- **CA 해시**: `sha256:1234...`
+
+📖 **자세한 방법**: [docs/TOKEN_GUIDE.md](docs/TOKEN_GUIDE.md)
+
+---
 
 ### 1. 시스템 의존성 설치
 
@@ -106,6 +153,14 @@ cp config/config.yaml.sample config/config.yaml
 vi config/config.yaml
 ```
 
+**필수 항목 수정:**
+```yaml
+master:
+  ip: "10.0.1.100"                  # ← 마스터 IP
+  token: "abcdef.0123456789abcdef"  # ← 발급받은 토큰
+  ca_cert_hash: "sha256:1234..."    # ← 발급받은 CA 해시
+```
+
 #### 방법 B: CLI로 생성
 
 ```bash
@@ -113,28 +168,26 @@ source venv/bin/activate
 k8s-vpn-agent init config/config.yaml
 ```
 
-### 2. 마스터 노드에서 토큰 생성
+### 2. Headscale 설정 (VPN 사용 시)
 
-마스터 노드에서 다음 명령어를 실행하여 조인 토큰과 CA 해시를 확인합니다:
+VPN을 통해 연결하는 경우에만 필요합니다.
 
-```bash
-# 토큰 생성
-kubeadm token create --print-join-command
-
-# 출력 예시:
-# kubeadm join 10.0.1.100:6443 --token abcdef.0123456789abcdef \
-#     --discovery-token-ca-cert-hash sha256:1234567890abcdef...
-```
-
-### 3. Headscale 설정 (VPN 사용 시)
-
-Headscale 서버에서 Pre-authentication key를 생성합니다:
+Headscale 서버에서 Pre-authentication key를 생성:
 
 ```bash
 headscale preauthkeys create --namespace default
 ```
 
-### 4. 에이전트 실행
+설정 파일에 추가:
+```yaml
+vpn:
+  enabled: true
+  type: "headscale"
+  headscale_url: "https://headscale.example.com"
+  auth_key: "발급받은-키"
+```
+
+### 3. 에이전트 실행
 
 #### 방법 A: 설정 파일 사용
 
@@ -156,7 +209,7 @@ k8s-vpn-agent join --interactive
 k8s-vpn-agent join --config config/config.yaml --debug
 ```
 
-### 5. 설정 파일 검증
+### 4. 설정 파일 검증
 
 ```bash
 k8s-vpn-agent validate --config config/config.yaml

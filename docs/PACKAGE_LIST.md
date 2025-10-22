@@ -91,9 +91,8 @@ jinja2>=3.1.2
 ### Kubernetes
 | 패키지 | 버전 | 용도 |
 |--------|------|------|
-| kubeadm | 1.28.x | 클러스터 초기화/조인 |
-| kubelet | 1.28.x | 노드 에이전트 |
-| kubectl | 1.28.x | CLI 도구 |
+| kubeadm | 1.30.x | 클러스터 조인 (워커 노드) |
+| kubelet | 1.30.x | 노드 에이전트 (필수) |
 
 ### 컨테이너 런타임
 | 패키지 | 용도 |
@@ -120,8 +119,8 @@ https://download.docker.com/linux/centos
 
 **모든 OS**:
 ```
-https://pkgs.k8s.io/core:/stable:/v1.28/deb/    # Debian/Ubuntu
-https://pkgs.k8s.io/core:/stable:/v1.28/rpm/    # CentOS/RHEL/Fedora
+https://pkgs.k8s.io/core:/stable:/v1.30/deb/    # Debian/Ubuntu
+https://pkgs.k8s.io/core:/stable:/v1.30/rpm/    # CentOS/RHEL/Fedora
 ```
 
 ### Tailscale 저장소

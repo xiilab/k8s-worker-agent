@@ -54,4 +54,3 @@ agent:
 runtime:
   type: "containerd"
   version: "latest"
-

@@ -73,7 +73,7 @@ class AgentConfig:
 @dataclass
 class RuntimeConfig:
     """컨테이너 런타임 설정"""
-    type: str = "containerd"
+    type: str = "crio"
     version: str = "latest"
 
 
