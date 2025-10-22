@@ -27,9 +27,35 @@ fi
 
 echo "감지된 OS: $OS $VER"
 
-# 0. 기존 저장소 정리 (오류 방지)
+# 0. Python 환경 설치
 echo ""
-echo "[0/6] 기존 설정 정리 중..."
+echo "[0/7] Python 환경 설치 중..."
+if ! command -v python3 &> /dev/null; then
+    echo "Python3를 설치합니다..."
+    apt-get update -qq
+    apt-get install -y -qq python3 python3-pip python3-dev build-essential
+    echo "✓ Python3 설치 완료: $(python3 --version)"
+else
+    echo "✓ Python3가 이미 설치되어 있습니다: $(python3 --version)"
+fi
+
+# pip 확인 및 설치
+if ! command -v pip3 &> /dev/null; then
+    echo "pip3를 설치합니다..."
+    apt-get install -y -qq python3-pip
+fi
+
+# 빌드 도구 확인 (Python 패키지 컴파일용)
+if ! dpkg -l | grep -q build-essential; then
+    echo "빌드 도구를 설치합니다..."
+    apt-get install -y -qq build-essential python3-dev
+fi
+
+echo "✓ Python 환경 준비 완료"
+
+# 1. 기존 저장소 정리 (오류 방지)
+echo ""
+echo "[1/7] 기존 설정 정리 중..."
 echo "오래된 CRI-O 및 Kubernetes 저장소를 제거합니다..."
 
 # 오래된 CRI-O 저장소 제거
@@ -49,15 +75,15 @@ mkdir -p /etc/apt/keyrings
 
 echo "✓ 기존 설정 정리 완료"
 
-# 1. 시스템 업데이트 및 기본 패키지 설치
+# 2. 시스템 업데이트 및 기본 패키지 설치
 echo ""
-echo "[1/6] 시스템 업데이트 및 기본 패키지 설치..."
+echo "[2/7] 시스템 업데이트 및 기본 패키지 설치..."
 apt-get update -y
 apt-get install -y apt-transport-https ca-certificates curl gnupg2 software-properties-common
 
-# 2. 커널 모듈 로드
+# 3. 커널 모듈 로드
 echo ""
-echo "[2/6] 커널 모듈 설정..."
+echo "[3/7] 커널 모듈 설정..."
 cat <<EOF | tee /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
@@ -66,9 +92,9 @@ EOF
 modprobe overlay
 modprobe br_netfilter
 
-# 3. sysctl 설정
+# 4. sysctl 설정
 echo ""
-echo "[3/6] sysctl 파라미터 설정..."
+echo "[4/7] sysctl 파라미터 설정..."
 cat <<EOF | tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -77,9 +103,9 @@ EOF
 
 sysctl --system
 
-# 4. CRI-O 설치
+# 5. CRI-O 설치
 echo ""
-echo "[4/6] CRI-O 컨테이너 런타임 설치..."
+echo "[5/7] CRI-O 컨테이너 런타임 설치..."
 
 # Kubernetes 버전에 맞는 CRI-O 버전 설정
 KUBERNETES_VERSION=1.30
@@ -178,11 +204,11 @@ systemctl restart crio
 
 echo "✓ CRI-O 설치 완료 및 실행 중"
 
-# 5. Kubernetes 도구 설치 (kubeadm, kubelet, kubectl)
+# 6. Kubernetes 도구 설치 (kubeadm, kubelet, kubectl)
 echo ""
-echo "[5/6] Kubernetes 도구 설치..."
+echo "[6/7] Kubernetes 도구 설치..."
 
-# Kubernetes 저장소 추가 (이미 [0/6]에서 정리됨)
+# Kubernetes 저장소 추가 (이미 [1/7]에서 정리됨)
 echo "Kubernetes v${KUBERNETES_VERSION} 저장소 추가 중..."
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBERNETES_VERSION}/deb/Release.key | \
     gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -210,9 +236,9 @@ systemctl enable kubelet
 
 echo "Kubernetes 도구 설치 완료"
 
-# 6. 네트워크 도구 및 방화벽 설정
+# 7. 네트워크 도구 및 방화벽 설정
 echo ""
-echo "[6/6] 네트워크 도구 설치..."
+echo "[7/7] 네트워크 도구 설치..."
 apt-get install -y iptables ipset conntrack socat
 
 # swap 비활성화 (Kubernetes 요구사항)

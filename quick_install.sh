@@ -17,12 +17,8 @@ fi
 # 현재 디렉토리로 이동
 cd "$(dirname "$0")"
 
-echo "📦 1/4 Python 패키지 설치 중..."
-pip3 install -q pyyaml requests rich prompt_toolkit
-echo "✅ Python 패키지 설치 완료"
-echo ""
-
-echo "📦 2/4 시스템 의존성 설치 중 (5-10분 소요)..."
+echo "📦 1/4 시스템 의존성 설치 중 (5-10분 소요)..."
+echo "   - Python 환경 (python3, pip, build-essential)"
 echo "   - CRI-O 컨테이너 런타임"
 echo "   - Kubernetes 도구 (kubeadm, kubelet, kubectl)"
 echo "   - 네트워크 도구"
@@ -31,6 +27,11 @@ echo ""
 bash install_dependencies.sh
 
 echo ""
+echo "📦 2/4 Python 패키지 설치 중..."
+pip3 install -q pyyaml requests rich prompt_toolkit netifaces
+echo "✅ Python 패키지 설치 완료"
+echo ""
+
 echo "=========================================="
 echo "⚙️  3/4 클러스터 조인 설정"
 echo "=========================================="
