@@ -1,0 +1,33 @@
+# Kubernetes Worker Node Agent Configuration
+# 자동 생성된 설정 파일
+
+master_node:
+  api_server: "10.61.3.12:6443"
+  token: "8l2pc3.mg063z86svmb3l71"
+  ca_cert_hash: "sha256:8b684de8ec14e8da526b52e4d3e3f2490cbc42a9ec6be45b51bbb4631e67b9d8"
+
+vpn:
+  enabled: false
+  headscale_url: ""
+  auth_key: ""
+  auto_detect: true
+
+worker_node:
+  hostname_prefix: "worker"
+  username: "j.seo@xiilab.com"
+  labels:
+    - "node-role.kubernetes.io/worker=worker"
+    - "added-username=j.seo"
+    - "added-user-domain=xiilab.com"
+
+firewall:
+  k8s_api_port: 6443
+  kubelet_port: 10250
+  nodeport_range: "30000-32767"
+  auto_configure: true
+
+system:
+  log_file: "/var/log/k8s-agent.log"
+  auto_reconnect: true
+  rollback_on_failure: true
+  backup_config: true

@@ -1,0 +1,34 @@
+# Kubernetes Worker Node Agent Configuration
+# 이 파일을 config.yaml로 복사하여 사용하세요
+
+master_node:
+  api_server: "192.168.1.10:6443"  # 마스터 노드 IP:포트 (실제 값으로 변경 필요)
+  token: "abcdef.0123456789abcdef"   # kubeadm 토큰 (실제 값으로 변경 필요)
+  ca_cert_hash: "sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # CA 인증서 해시 (실제 값으로 변경 필요)
+
+vpn:
+  enabled: false  # VPN 사용 여부
+  headscale_url: ""  # Headscale 서버 URL
+  auth_key: ""  # Headscale 인증 키
+  auto_detect: true  # 자동으로 VPN 필요 여부 감지
+
+worker_node:
+  hostname_prefix: "worker"  # 호스트명 접두사
+  username: "user@example.com"  # 노드 추가한 사용자 이름 (이메일 형식 권장)
+  labels:
+    - "node-role.kubernetes.io/worker=worker"
+    - "added-username=user"  # 이메일의 username 부분
+    - "added-user-domain=example.com"  # 이메일의 domain 부분
+
+firewall:
+  k8s_api_port: 6443
+  kubelet_port: 10250
+  nodeport_range: "30000-32767"
+  auto_configure: true  # 자동으로 방화벽 설정
+
+system:
+  log_file: "/var/log/k8s-agent.log"
+  auto_reconnect: true  # 실패 시 자동 재연결
+  rollback_on_failure: true  # 실패 시 자동 롤백
+  backup_config: true  # 설정 파일 백업
+
