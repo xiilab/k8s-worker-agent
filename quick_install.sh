@@ -205,16 +205,17 @@ echo ""
 echo "🔧 kubespray 클러스터 호환성 확인 중..."
 
 if [ -f /etc/kubernetes/kubelet.conf ]; then
-    # ConfigMap 존재 여부 확인
-    CONFIGMAP_EXISTS=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get configmap -n kube-system kubernetes-services-endpoint 2>/dev/null && echo "true" || echo "false")
+    # ConfigMap 데이터 확인 (set -e 영향 받지 않도록 안전하게 처리)
+    set +e
+    CONFIGMAP_DATA=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get configmap -n kube-system kubernetes-services-endpoint -o jsonpath='{.data}' 2>/dev/null || echo "")
+    CONFIGMAP_EXIT=$?
+    set -e
     
-    if [ "$CONFIGMAP_EXISTS" = "false" ]; then
+    # ConfigMap이 존재하지 않는 경우
+    if [ $CONFIGMAP_EXIT -ne 0 ]; then
         echo "ℹ️  kubernetes-services-endpoint ConfigMap이 없습니다. (정상 - 일반 kubeadm 클러스터)"
         echo "   kubespray 클러스터가 아닌 경우 이 ConfigMap은 필요하지 않습니다."
     else
-        # ConfigMap이 존재하면 데이터 확인
-        CONFIGMAP_DATA=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get configmap -n kube-system kubernetes-services-endpoint -o jsonpath='{.data}' 2>/dev/null || echo "")
-        
         # 데이터가 비어있거나 "{}" 또는 "null"인지 확인
         NEEDS_PATCH=false
         if [ -z "$CONFIGMAP_DATA" ] || [ "$CONFIGMAP_DATA" = "null" ] || [ "$CONFIGMAP_DATA" = "{}" ]; then
@@ -233,11 +234,11 @@ if [ -f /etc/kubernetes/kubelet.conf ]; then
             echo ""
             echo "📝 ConfigMap 패치 시도 중..."
             
-            # ConfigMap 패치 시도 (set -e 영향 받지 않도록 || true 추가)
-            set +e  # 임시로 에러 중단 비활성화
+            # ConfigMap 패치 시도
+            set +e
             PATCH_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf patch configmap kubernetes-services-endpoint -n kube-system --type merge -p "{\"data\":{\"KUBERNETES_SERVICE_HOST\":\"$MASTER_IP\",\"KUBERNETES_SERVICE_PORT\":\"6443\"}}" 2>&1 || true)
             PATCH_EXIT=$?
-            set -e  # 다시 활성화
+            set -e
             
             echo "   패치 결과 코드: $PATCH_EXIT"
             
