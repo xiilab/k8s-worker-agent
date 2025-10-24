@@ -207,9 +207,14 @@ echo "🔧 kubespray 클러스터 호환성 확인 중..."
 if [ -f /etc/kubernetes/kubelet.conf ]; then
     # ConfigMap 데이터 확인 (set -e 영향 받지 않도록 안전하게 처리)
     set +e
-    CONFIGMAP_DATA=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get configmap -n kube-system kubernetes-services-endpoint -o jsonpath='{.data}' 2>/dev/null || echo "")
+    CONFIGMAP_DATA=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get configmap -n kube-system kubernetes-services-endpoint -o jsonpath='{.data}' 2>/dev/null)
     CONFIGMAP_EXIT=$?
     set -e
+    
+    # exit code가 실패면 빈 문자열로 설정
+    if [ $CONFIGMAP_EXIT -ne 0 ]; then
+        CONFIGMAP_DATA=""
+    fi
     
     # ConfigMap이 존재하지 않는 경우
     if [ $CONFIGMAP_EXIT -ne 0 ]; then
