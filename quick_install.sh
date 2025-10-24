@@ -233,25 +233,33 @@ if [ -f /etc/kubernetes/kubelet.conf ]; then
             echo ""
             echo "📝 ConfigMap 패치 시도 중..."
             
-            # ConfigMap 패치 시도
-            PATCH_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf patch configmap kubernetes-services-endpoint -n kube-system --type merge -p "{\"data\":{\"KUBERNETES_SERVICE_HOST\":\"$MASTER_IP\",\"KUBERNETES_SERVICE_PORT\":\"6443\"}}" 2>&1)
+            # ConfigMap 패치 시도 (set -e 영향 받지 않도록 || true 추가)
+            set +e  # 임시로 에러 중단 비활성화
+            PATCH_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf patch configmap kubernetes-services-endpoint -n kube-system --type merge -p "{\"data\":{\"KUBERNETES_SERVICE_HOST\":\"$MASTER_IP\",\"KUBERNETES_SERVICE_PORT\":\"6443\"}}" 2>&1 || true)
             PATCH_EXIT=$?
+            set -e  # 다시 활성화
+            
+            echo "   패치 결과 코드: $PATCH_EXIT"
             
             if [ $PATCH_EXIT -eq 0 ]; then
                 echo "✅ ConfigMap 패치 성공!"
                 echo ""
                 echo "🔄 Calico 파드 재시작 중..."
-                DELETE_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf delete pod -n kube-system -l k8s-app=calico-node --field-selector spec.nodeName=$WORKER_HOSTNAME 2>&1)
+                
+                set +e
+                DELETE_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf delete pod -n kube-system -l k8s-app=calico-node --field-selector spec.nodeName=$WORKER_HOSTNAME 2>&1 || true)
                 DELETE_EXIT=$?
+                set -e
                 
                 if [ $DELETE_EXIT -eq 0 ]; then
                     echo "✅ Calico 파드 재시작 완료"
                     echo "   2-3분 후 노드가 Ready 상태가 됩니다."
                 else
-                    echo "ℹ️  Calico 파드 재시작: $DELETE_RESULT"
+                    echo "ℹ️  Calico 파드 재시작 결과: $DELETE_RESULT"
                 fi
             else
                 echo "⚠️  ConfigMap 패치 실패 (권한 부족 또는 제한)"
+                echo "   상세: $PATCH_RESULT"
                 echo ""
                 echo "❗ 마스터 노드에서 다음 명령을 실행하세요:"
                 echo ""
