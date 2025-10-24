@@ -205,90 +205,111 @@ echo ""
 echo "🔧 kubespray 클러스터 호환성 확인 중..."
 
 if [ -f /etc/kubernetes/kubelet.conf ]; then
-    # ConfigMap 데이터 확인 (set -e 영향 받지 않도록 안전하게 처리)
+    # 1단계: 클러스터 연결 상태 확인
+    echo "   클러스터 연결 테스트 중..."
     set +e
-    CONFIGMAP_DATA=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get configmap -n kube-system kubernetes-services-endpoint -o jsonpath='{.data}' 2>/dev/null)
-    CONFIGMAP_EXIT=$?
+    CLUSTER_CHECK=$(timeout 5 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get nodes 2>&1)
+    CLUSTER_CHECK_EXIT=$?
     set -e
     
-    # exit code가 실패면 빈 문자열로 설정
-    if [ $CONFIGMAP_EXIT -ne 0 ]; then
-        CONFIGMAP_DATA=""
-    fi
-    
-    # ConfigMap이 존재하지 않는 경우
-    if [ $CONFIGMAP_EXIT -ne 0 ]; then
-        echo "ℹ️  kubernetes-services-endpoint ConfigMap이 없습니다. (정상 - 일반 kubeadm 클러스터)"
-        echo "   kubespray 클러스터가 아닌 경우 이 ConfigMap은 필요하지 않습니다."
+    if [ $CLUSTER_CHECK_EXIT -ne 0 ]; then
+        # 클러스터 연결 실패 - 이전 조인이 실패했거나 노드가 삭제된 경우
+        echo "⚠️  클러스터 연결 실패: 이전 kubelet.conf가 유효하지 않습니다."
+        echo "   - 노드가 클러스터에서 삭제되었거나"
+        echo "   - 이전 조인 시도가 실패한 상태일 수 있습니다."
+        echo ""
+        echo "ℹ️  ConfigMap 확인을 건너뜁니다. (클러스터 연결 불가)"
+        echo "   새로 조인된 노드는 정상 동작합니다."
     else
-        # 데이터가 비어있거나 "{}" 또는 "null"인지 확인
-        NEEDS_PATCH=false
-        if [ -z "$CONFIGMAP_DATA" ] || [ "$CONFIGMAP_DATA" = "null" ] || [ "$CONFIGMAP_DATA" = "{}" ]; then
-            NEEDS_PATCH=true
-        else
-            # KUBERNETES_SERVICE_HOST 키가 있는지 확인
-            HAS_HOST=$(echo "$CONFIGMAP_DATA" | grep -c "KUBERNETES_SERVICE_HOST" || true)
-            if [ "$HAS_HOST" -eq 0 ]; then
-                NEEDS_PATCH=true
-            fi
+        # 클러스터 연결 성공 - ConfigMap 확인 진행
+        echo "   ✅ 클러스터 연결 정상"
+        echo ""
+        
+        # 2단계: ConfigMap 존재 여부 및 데이터 확인
+        set +e
+        CONFIGMAP_DATA=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get configmap -n kube-system kubernetes-services-endpoint -o jsonpath='{.data}' 2>/dev/null)
+        CONFIGMAP_EXIT=$?
+        set -e
+        
+        # exit code가 실패면 빈 문자열로 설정
+        if [ $CONFIGMAP_EXIT -ne 0 ]; then
+            CONFIGMAP_DATA=""
         fi
         
-        if [ "$NEEDS_PATCH" = "true" ]; then
-            echo "⚠️  kubernetes-services-endpoint ConfigMap이 비어있습니다."
-            echo "   kubespray 클러스터에서 Calico CNI가 정상 동작하려면 이 ConfigMap이 필요합니다."
-            echo ""
-            echo "📝 ConfigMap 패치 시도 중..."
+        # ConfigMap이 존재하지 않는 경우
+        if [ $CONFIGMAP_EXIT -ne 0 ]; then
+            echo "ℹ️  kubernetes-services-endpoint ConfigMap이 없습니다. (정상 - 일반 kubeadm 클러스터)"
+            echo "   kubespray 클러스터가 아닌 경우 이 ConfigMap은 필요하지 않습니다."
+        else
+            # ConfigMap 존재 - 데이터 확인
+            echo "ℹ️  kubernetes-services-endpoint ConfigMap 발견"
             
-            # ConfigMap 패치 시도
-            set +e
-            PATCH_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf patch configmap kubernetes-services-endpoint -n kube-system --type merge -p "{\"data\":{\"KUBERNETES_SERVICE_HOST\":\"$MASTER_IP\",\"KUBERNETES_SERVICE_PORT\":\"6443\"}}" 2>&1 || true)
-            PATCH_EXIT=$?
-            set -e
-            
-            echo "   패치 결과 코드: $PATCH_EXIT"
-            
-            if [ $PATCH_EXIT -eq 0 ]; then
-                echo "✅ ConfigMap 패치 성공!"
+            # 데이터가 비어있는지 확인
+            if [ -z "$CONFIGMAP_DATA" ] || [ "$CONFIGMAP_DATA" = "null" ] || [ "$CONFIGMAP_DATA" = "{}" ]; then
+                # 데이터가 비어있음 - 패치 필요
+                echo "   → 데이터 없음 (비어있음)"
                 echo ""
-                echo "🔄 Calico 파드 재시작 중..."
+                echo "⚠️  ConfigMap이 비어있어 패치가 필요합니다."
+                echo "   kubespray 클러스터에서 Calico CNI가 정상 동작하려면 이 데이터가 필요합니다."
+                echo ""
+                echo "📝 ConfigMap 패치 시도 중..."
                 
+                # ConfigMap 패치 시도
                 set +e
-                DELETE_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf delete pod -n kube-system -l k8s-app=calico-node --field-selector spec.nodeName=$WORKER_HOSTNAME 2>&1 || true)
-                DELETE_EXIT=$?
+                PATCH_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf patch configmap kubernetes-services-endpoint -n kube-system --type merge -p "{\"data\":{\"KUBERNETES_SERVICE_HOST\":\"$MASTER_IP\",\"KUBERNETES_SERVICE_PORT\":\"6443\"}}" 2>&1)
+                PATCH_EXIT=$?
                 set -e
                 
-                if [ $DELETE_EXIT -eq 0 ]; then
-                    echo "✅ Calico 파드 재시작 완료"
-                    echo "   2-3분 후 노드가 Ready 상태가 됩니다."
+                echo "   패치 결과 코드: $PATCH_EXIT"
+                
+                if [ $PATCH_EXIT -eq 0 ]; then
+                    echo "✅ ConfigMap 패치 성공!"
+                    echo ""
+                    echo "🔄 Calico 파드 재시작 중..."
+                    
+                    set +e
+                    DELETE_RESULT=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf delete pod -n kube-system -l k8s-app=calico-node --field-selector spec.nodeName=$WORKER_HOSTNAME 2>&1)
+                    DELETE_EXIT=$?
+                    set -e
+                    
+                    if [ $DELETE_EXIT -eq 0 ]; then
+                        echo "✅ Calico 파드 재시작 완료"
+                        echo "   2-3분 후 노드가 Ready 상태가 됩니다."
+                    else
+                        echo "ℹ️  Calico 파드 재시작 결과: $DELETE_RESULT"
+                    fi
                 else
-                    echo "ℹ️  Calico 파드 재시작 결과: $DELETE_RESULT"
+                    echo "⚠️  ConfigMap 패치 실패 (권한 부족 또는 제한)"
+                    if [ -n "$PATCH_RESULT" ]; then
+                        echo "   상세: $PATCH_RESULT"
+                    fi
+                    echo ""
+                    echo "❗ 마스터 노드에서 다음 명령을 실행하세요:"
+                    echo ""
+                    echo "------- 복사 시작 -------"
+                    echo "# 1. ConfigMap 패치 (한 번만 실행하면 이후 모든 노드에 적용)"
+                    echo "kubectl patch configmap kubernetes-services-endpoint -n kube-system --type merge -p '{\"data\":{\"KUBERNETES_SERVICE_HOST\":\"$MASTER_IP\",\"KUBERNETES_SERVICE_PORT\":\"6443\"}}'"
+                    echo ""
+                    echo "# 2. Worker role 레이블 추가"
+                    echo "kubectl label node $WORKER_HOSTNAME node-role.kubernetes.io/worker=worker"
+                    echo ""
+                    echo "# 3. Calico 파드 재시작"
+                    echo "kubectl delete pod -n kube-system -l k8s-app=calico-node --field-selector spec.nodeName=$WORKER_HOSTNAME"
+                    echo ""
+                    echo "# 4. 2분 대기 후 확인"
+                    echo "sleep 120 && kubectl get nodes -o wide"
+                    echo "------- 복사 끝 -------"
                 fi
             else
-                echo "⚠️  ConfigMap 패치 실패 (권한 부족 또는 제한)"
-                echo "   상세: $PATCH_RESULT"
-                echo ""
-                echo "❗ 마스터 노드에서 다음 명령을 실행하세요:"
-                echo ""
-                echo "------- 복사 시작 -------"
-                echo "# 1. ConfigMap 패치 (한 번만 실행하면 이후 모든 노드에 적용)"
-                echo "kubectl patch configmap kubernetes-services-endpoint -n kube-system --type merge -p '{\"data\":{\"KUBERNETES_SERVICE_HOST\":\"$MASTER_IP\",\"KUBERNETES_SERVICE_PORT\":\"6443\"}}'"
-                echo ""
-                echo "# 2. Worker role 레이블 추가"
-                echo "kubectl label node $WORKER_HOSTNAME node-role.kubernetes.io/worker=worker"
-                echo ""
-                echo "# 3. Calico 파드 재시작"
-                echo "kubectl delete pod -n kube-system -l k8s-app=calico-node --field-selector spec.nodeName=$WORKER_HOSTNAME"
-                echo ""
-                echo "# 4. 2분 대기 후 확인"
-                echo "sleep 120 && kubectl get nodes -o wide"
-                echo "------- 복사 끝 -------"
+                # 데이터가 이미 있음 - 패치 건너뜀
+                echo "   → 데이터 있음 (설정됨)"
+                echo "✅ ConfigMap에 이미 데이터가 있습니다. 패치를 건너뜁니다."
             fi
-        else
-            echo "✅ kubernetes-services-endpoint ConfigMap이 이미 설정되어 있습니다."
         fi
     fi
 else
-    echo "⚠️  kubelet.conf 파일이 없습니다. ConfigMap 확인을 건너뜁니다."
+    echo "ℹ️  kubelet.conf 파일이 없습니다. (첫 조인)"
+    echo "   ConfigMap 확인을 건너뜁니다."
 fi
 
 echo ""
