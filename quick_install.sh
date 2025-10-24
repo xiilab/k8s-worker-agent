@@ -236,6 +236,12 @@ if [ -f /etc/kubernetes/kubelet.conf ]; then
             CONFIGMAP_DATA=""
         fi
         
+        # 디버깅: 실제 데이터 값 출력
+        echo "   [디버그] ConfigMap 조회 결과: exit=$CONFIGMAP_EXIT"
+        echo "   [디버그] 데이터 내용: '$CONFIGMAP_DATA'"
+        echo "   [디버그] 데이터 길이: ${#CONFIGMAP_DATA}"
+        echo ""
+        
         # ConfigMap이 존재하지 않는 경우
         if [ $CONFIGMAP_EXIT -ne 0 ]; then
             echo "ℹ️  kubernetes-services-endpoint ConfigMap이 없습니다. (정상 - 일반 kubeadm 클러스터)"
@@ -244,8 +250,9 @@ if [ -f /etc/kubernetes/kubelet.conf ]; then
             # ConfigMap 존재 - 데이터 확인
             echo "ℹ️  kubernetes-services-endpoint ConfigMap 발견"
             
-            # 데이터가 비어있는지 확인
-            if [ -z "$CONFIGMAP_DATA" ] || [ "$CONFIGMAP_DATA" = "null" ] || [ "$CONFIGMAP_DATA" = "{}" ]; then
+            # 데이터가 비어있는지 확인 (더 엄격하게)
+            DATA_LENGTH=${#CONFIGMAP_DATA}
+            if [ $DATA_LENGTH -eq 0 ] || [ "$CONFIGMAP_DATA" = "null" ] || [ "$CONFIGMAP_DATA" = "{}" ]; then
                 # 데이터가 비어있음 - 패치 필요
                 echo "   → 데이터 없음 (비어있음)"
                 echo ""
