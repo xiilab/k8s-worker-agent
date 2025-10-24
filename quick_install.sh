@@ -38,9 +38,9 @@ echo "=========================================="
 echo ""
 
 # ⚠️ 주의: 실제 환경에 맞게 수정 필요
-MASTER_API="10.61.3.12:6443"  # 마스터 노드 IP:포트
-TOKEN="8l2pc3.mg063z86svmb3l71"  # kubeadm token (마스터에서: kubeadm token create)
-CA_HASH="sha256:8b684de8ec14e8da526b52e4d3e3f2490cbc42a9ec6be45b51bbb4631e67b9d8"  # CA 해시
+MASTER_API="10.61.3.40:6443"  # 마스터 노드 IP:포트
+TOKEN="ajd8xg.oxkw847ckwdevjts"  # kubeadm token (마스터에서: kubeadm token create)
+CA_HASH="sha256:4e3fc11265ae8ebdebee502a1aff7ab05e43375ecd7d10e79e3ee682b76452c4"  # CA 해시
 
 echo "마스터 노드: $MASTER_API"
 echo "토큰: ${TOKEN:0:10}..."
