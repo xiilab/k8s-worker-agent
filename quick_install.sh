@@ -39,8 +39,16 @@ echo ""
 
 # ⚠️ 주의: 실제 환경에 맞게 수정 필요
 MASTER_API="10.61.3.40:6443"  # 마스터 노드 IP:포트
-TOKEN="ajd8xg.oxkw847ckwdevjts"  # kubeadm token (마스터에서: kubeadm token create)
-CA_HASH="sha256:4e3fc11265ae8ebdebee502a1aff7ab05e43375ecd7d10e79e3ee682b76452c4"  # CA 해시
+# 40번 노드
+# TOKEN="ajd8xg.oxkw847ckwdevjts"  # kubeadm token (마스터에서: kubeadm token create)
+# CA_HASH="sha256:4e3fc11265ae8ebdebee502a1aff7ab05e43375ecd7d10e79e3ee682b76452c4"  # CA 해시
+
+# 1번 노드
+MASTER_API="10.61.3.12:6443"  # 마스터 노드 IP:포트
+TOKEN="ce3lbp.h3kzqknz8jqacoi5"  # kubeadm token (마스터에서: kubeadm token create)
+CA_HASH="sha256:860f691019fdc3a399455eeef000f584fe11579c4e61cda9d228d8a2ade99b6e"  # CA 해시
+
+
 
 echo "마스터 노드: $MASTER_API"
 echo "토큰: ${TOKEN:0:10}..."
@@ -131,38 +139,62 @@ else
     
     # IP 중복 등록 방지: 이미 kubelet.conf가 있다면 (이전 조인 이력) IP 중복 체크
     if [ -f /etc/kubernetes/kubelet.conf ]; then
-        # kubectl이 정상 작동하는지 먼저 확인
-        if timeout 5 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf cluster-info >/dev/null 2>&1; then
+        echo ""
+        echo "🔍 기존 Kubernetes 설정 발견..."
+        
+        # 기존 kubelet.conf가 현재 목표 클러스터를 가리키는지 확인
+        EXISTING_SERVER=$(grep 'server:' /etc/kubernetes/kubelet.conf 2>/dev/null | awk '{print $2}' | head -n1 || echo "")
+        TARGET_SERVER="https://$MASTER_API"
+        
+        if [ -n "$EXISTING_SERVER" ] && [ "$EXISTING_SERVER" != "$TARGET_SERVER" ]; then
+            echo "⚠️  다른 클러스터의 설정이 발견되었습니다!"
+            echo "   기존 클러스터: $EXISTING_SERVER"
+            echo "   목표 클러스터: $TARGET_SERVER"
             echo ""
-            echo "🔍 IP 중복 등록 확인 중..."
+            echo "🧹 기존 설정을 정리하고 새 클러스터에 조인합니다..."
             
-            CURRENT_HOSTNAME=$(hostname)
+            # 기존 설정 정리 (agent.py도 정리하지만, 미리 정리)
+            kubeadm reset -f 2>/dev/null || true
+            rm -rf /etc/kubernetes 2>/dev/null || true
+            rm -rf /var/lib/kubelet/* 2>/dev/null || true
+            rm -rf /etc/cni/net.d/* 2>/dev/null || true
             
-            # 동일한 IP를 사용하는 노드가 클러스터에 있는지 확인
-            EXISTING_NODES=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get nodes -o custom-columns=NAME:.metadata.name,IP:.status.addresses[0].address --no-headers 2>/dev/null | grep "$CURRENT_IP" || true)
-            
-            if [ -n "$EXISTING_NODES" ]; then
-                echo ""
-                echo "⚠️  경고: 동일한 IP($CURRENT_IP)를 가진 노드가 클러스터에 등록되어 있습니다!"
-                echo ""
-                echo "등록된 노드:"
-                echo "$EXISTING_NODES"
-                echo ""
-                echo "이 IP로 새 노드를 추가하면 네트워크 충돌이 발생할 수 있습니다."
-                echo ""
-                echo "해결 방법:"
-                echo "  1. 기존 노드를 제거하고 재등록:"
-                echo "     마스터 노드에서: kubectl delete node <노드이름>"
-                echo "     워커 노드에서:   sudo bash cleanup.sh && sudo bash quick_install.sh"
-                echo ""
-                echo "  2. 다른 서버에서 실행하기 (다른 IP 사용)"
-                echo ""
-                exit 1
-            else
-                echo "✅ IP 중복 없음. 계속 진행합니다."
-            fi
+            echo "✅ 기존 설정 정리 완료. 새 클러스터 조인을 계속합니다."
+            echo ""
         else
-            echo "ℹ️  이전 설치 흔적 발견. 정리 후 계속 진행합니다."
+            # 같은 클러스터 - 정상적으로 IP 중복 체크
+            if timeout 5 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf cluster-info >/dev/null 2>&1; then
+                echo "   동일한 클러스터 감지. IP 중복 확인 중..."
+                
+                CURRENT_HOSTNAME=$(hostname)
+                
+                # 동일한 IP를 사용하는 노드가 클러스터에 있는지 확인
+                EXISTING_NODES=$(timeout 10 kubectl --kubeconfig=/etc/kubernetes/kubelet.conf get nodes -o custom-columns=NAME:.metadata.name,IP:.status.addresses[0].address --no-headers 2>/dev/null | grep "$CURRENT_IP" || true)
+                
+                if [ -n "$EXISTING_NODES" ]; then
+                    echo ""
+                    echo "⚠️  경고: 동일한 IP($CURRENT_IP)를 가진 노드가 클러스터에 등록되어 있습니다!"
+                    echo ""
+                    echo "등록된 노드:"
+                    echo "$EXISTING_NODES"
+                    echo ""
+                    echo "이 IP로 새 노드를 추가하면 네트워크 충돌이 발생할 수 있습니다."
+                    echo ""
+                    echo "해결 방법:"
+                    echo "  1. 기존 노드를 제거하고 재등록:"
+                    echo "     마스터 노드에서: kubectl delete node <노드이름>"
+                    echo "     워커 노드에서:   sudo bash cleanup.sh && sudo bash quick_install.sh"
+                    echo ""
+                    echo "  2. 다른 서버에서 실행하기 (다른 IP 사용)"
+                    echo ""
+                    exit 1
+                else
+                    echo "✅ IP 중복 없음. 계속 진행합니다."
+                fi
+            else
+                echo "ℹ️  이전 설치 흔적 발견했으나 클러스터 연결 불가."
+                echo "   정리 후 계속 진행합니다."
+            fi
         fi
     fi
 fi
