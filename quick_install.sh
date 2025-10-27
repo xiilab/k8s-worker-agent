@@ -38,8 +38,8 @@ echo "=========================================="
 echo ""
 
 # ⚠️ 주의: 실제 환경에 맞게 수정 필요
-MASTER_API="10.61.3.40:6443"  # 마스터 노드 IP:포트
 # 40번 노드
+# MASTER_API="10.61.3.40:6443"  # 마스터 노드 IP:포트
 # TOKEN="ajd8xg.oxkw847ckwdevjts"  # kubeadm token (마스터에서: kubeadm token create)
 # CA_HASH="sha256:4e3fc11265ae8ebdebee502a1aff7ab05e43375ecd7d10e79e3ee682b76452c4"  # CA 해시
 
