@@ -53,6 +53,79 @@ fi
 
 echo "✓ Python 환경 준비 완료"
 
+# 0.5. GPU 드라이버 확인 및 설치
+echo ""
+echo "[0.5/7] GPU 드라이버 확인 중..."
+
+# 드라이버 설치 플래그 초기화
+INSTALL_DRIVER=false
+
+# nvidia-smi로 드라이버 설치 여부 확인
+if command -v nvidia-smi &> /dev/null; then
+    DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -n1)
+    if [ -n "$DRIVER_VERSION" ]; then
+        echo "✓ NVIDIA 드라이버가 이미 설치되어 있습니다: $DRIVER_VERSION"
+        echo "  GPU 정보:"
+        nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | head -n1
+    else
+        echo "⚠️  nvidia-smi는 있지만 드라이버가 제대로 로드되지 않았습니다."
+        echo "  드라이버 재설치를 시도합니다..."
+        INSTALL_DRIVER=true
+    fi
+else
+    echo "NVIDIA 드라이버가 설치되어 있지 않습니다."
+    
+    # GPU 하드웨어 존재 여부 확인
+    if lspci | grep -i nvidia > /dev/null 2>&1; then
+        echo "✓ NVIDIA GPU 감지됨"
+        lspci | grep -i nvidia
+        echo ""
+        echo "NVIDIA 드라이버를 설치합니다..."
+        INSTALL_DRIVER=true
+    else
+        echo "ℹ️  NVIDIA GPU가 감지되지 않았습니다. 드라이버 설치를 건너뜁니다."
+        INSTALL_DRIVER=false
+    fi
+fi
+
+# 드라이버 설치 진행
+if [ "$INSTALL_DRIVER" = "true" ]; then
+    echo ""
+    echo "📦 NVIDIA 드라이버 535 버전 설치 중... (5-10분 소요)"
+    
+    # 필요한 패키지 설치
+    apt-get update -qq
+    apt-get install -y -qq build-essential dkms
+    
+    # Ubuntu 저장소에서 드라이버 설치
+    apt-get install -y nvidia-driver-535 nvidia-dkms-535
+    
+    if [ $? -eq 0 ]; then
+        echo "✓ NVIDIA 드라이버 535 설치 완료"
+        echo ""
+        echo "⚠️  중요: 드라이버 적용을 위해 시스템을 재부팅해야 합니다!"
+        echo ""
+        echo "재부팅 후 다음 명령으로 확인하세요:"
+        echo "  nvidia-smi"
+        echo ""
+        
+        read -p "지금 재부팅하시겠습니까? [y/N]: " REBOOT_NOW
+        if [[ "$REBOOT_NOW" =~ ^[Yy]$ ]]; then
+            echo "시스템을 재부팅합니다..."
+            echo "재부팅 후 이 스크립트를 다시 실행하세요: sudo bash install_dependencies.sh"
+            sleep 3
+            reboot
+        else
+            echo "재부팅을 건너뜁니다. 나중에 수동으로 재부팅하세요."
+            echo ""
+        fi
+    else
+        echo "⚠️  드라이버 설치 실패. 계속 진행합니다..."
+    fi
+fi
+
+echo "✓ GPU 드라이버 확인 완료"
+
 # 1. 기존 저장소 정리 (오류 방지)
 echo ""
 echo "[1/7] 기존 설정 정리 중..."
