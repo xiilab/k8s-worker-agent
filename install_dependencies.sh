@@ -112,7 +112,7 @@ if [ "$INSTALL_DRIVER" = "true" ]; then
         read -p "지금 재부팅하시겠습니까? [y/N]: " REBOOT_NOW
         if [[ "$REBOOT_NOW" =~ ^[Yy]$ ]]; then
             echo "시스템을 재부팅합니다..."
-            echo "재부팅 후 이 스크립트를 다시 실행하세요: sudo bash install_dependencies.sh"
+            echo "재부팅 후 이 스크립트를 다시 실행하세요: sudo bash quick_install.sh"
             sleep 3
             reboot
         else
@@ -328,7 +328,7 @@ echo "- CRI-O: $(crio --version | head -n1)"
 echo "- kubeadm: $(kubeadm version -o short)"
 echo "- kubelet: $(kubelet --version)"
 echo ""
-echo "다음 단계: Python 에이전트를 실행하여 클러스터에 조인하세요."
-echo "  python3 agent.py"
+echo "다음 단계: 자동 설치 스크립트를 실행하여 클러스터에 조인하세요."
+echo "  sudo bash quick_install.sh"
 echo ""
 

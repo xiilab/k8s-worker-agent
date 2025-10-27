@@ -152,8 +152,8 @@ else
                 echo ""
                 echo "해결 방법:"
                 echo "  1. 기존 노드를 제거하고 재등록:"
-                echo "     마스터 노드: kubectl delete node <노드이름>"
-                echo "     워커 노드:   sudo bash cleanup.sh && sudo bash quick_install.sh"
+                echo "     마스터 노드에서: kubectl delete node <노드이름>"
+                echo "     워커 노드에서:   sudo bash cleanup.sh && sudo bash quick_install.sh"
                 echo ""
                 echo "  2. 다른 서버에서 실행하기 (다른 IP 사용)"
                 echo ""
@@ -336,8 +336,6 @@ else
 fi
 
 echo ""
-echo "⚠️  마스터 노드에서 Worker role 레이블을 추가하세요:"
-echo "   kubectl label node $WORKER_HOSTNAME node-role.kubernetes.io/worker=worker"
 echo ""
 echo "📝 노드 상태 확인 (2-3분 후):"
 echo "   kubectl get nodes -o wide"

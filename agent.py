@@ -143,7 +143,7 @@ class K8sWorkerAgent:
             self.tui.show_progress("사전 요구사항 확인 중...")
             if not self.cluster_manager.check_prerequisites():
                 self.tui.show_error("사전 요구사항을 충족하지 못했습니다.")
-                self.tui.console.print("install_dependencies.sh를 먼저 실행해주세요.")
+                self.tui.console.print("quick_install.sh를 먼저 실행해주세요: sudo bash quick_install.sh")
                 return False
             self.tui.show_success("사전 요구사항 확인 완료")
             
