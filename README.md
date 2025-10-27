@@ -2,6 +2,29 @@
 
 kubespray 클러스터에 워커 노드를 자동으로 추가하는 도구입니다.
 
+## ⚠️ kubespray 클러스터 사전 설정 (필수)
+
+**마스터 노드에서 한 번만 실행하세요:**
+
+```bash
+MASTER_IP="10.61.3.40"  # 실제 마스터 IP로 변경
+
+# 1. kubernetes-services-endpoint ConfigMap 설정
+kubectl patch configmap kubernetes-services-endpoint -n kube-system --type merge \
+  -p "{\"data\":{\"KUBERNETES_SERVICE_HOST\":\"$MASTER_IP\",\"KUBERNETES_SERVICE_PORT\":\"6443\"}}"
+
+# 2. kube-proxy ConfigMap 수정 (127.0.0.1 → 실제 마스터 IP)
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+  sed "s|server: https://127.0.0.1:6443|server: https://$MASTER_IP:6443|g" | \
+  kubectl apply -f -
+
+# 3. 모든 kube-proxy 재시작
+kubectl delete pod -n kube-system -l k8s-app=kube-proxy
+```
+
+> **왜 필요한가요?**  
+> kubespray는 기본적으로 `server: https://127.0.0.1:6443`으로 설정되어 있어 워커 노드에서 API 서버 연결(10.233.0.1:443)이 실패합니다.
+
 ## 빠른 설치
 
 ```bash
@@ -36,13 +59,16 @@ kubectl get nodes -o wide
 
 ## 주요 기능
 
+- ✅ Python 환경 자동 설치 (python3, pip, build-essential)
 - ✅ CRI-O, Kubernetes 도구 자동 설치
 - ✅ 클러스터 자동 조인 (kubeadm)
 - ✅ kubespray 클러스터 호환 (ConfigMap 자동 패치)
+- ✅ GPU 자동 감지 및 레이블링
 - ✅ IP 중복 방지
 - ✅ 사용자 레이블 자동 생성
 - ✅ Calico CNI 자동 설정
 - ✅ 자동 롤백 (실패 시)
+- ✅ GPU Operator 디버깅 도구
 
 ## 시스템 요구사항
 
@@ -86,6 +112,58 @@ sudo bash cleanup.sh
    kubectl delete pod -n kube-system -l k8s-app=calico-node --field-selector spec.nodeName=<워커노드>
    ```
 
+### GPU Operator 관련 문제
+
+#### GPU가 없는 워커 노드에서 GPU Operator 파드가 CrashLoopBackOff 발생
+
+**증상:**
+- `gpu-operator-node-feature-discovery-worker` 파드가 GPU 없는 노드에서 CrashLoopBackOff
+- GPU 관련 데몬셋이 모든 노드에 스케줄링되어 리소스 낭비
+
+**자동 해결:**
+- `quick_install.sh`는 자동으로 GPU 유무를 감지하고 레이블을 추가합니다
+- GPU가 없는 노드: `nvidia.com/gpu=false` 레이블 자동 추가
+
+**수동 해결 (마스터 노드):**
+```bash
+# 1. GPU 없는 노드에 레이블 추가
+kubectl label node <워커노드이름> nvidia.com/gpu=false --overwrite
+
+# 2. 해당 노드의 GPU Operator 파드 삭제 (자동 재생성 방지)
+kubectl delete pod -n gpu-operator --field-selector spec.nodeName=<워커노드이름>
+
+# 3. GPU Operator가 GPU 없는 노드를 스킵하도록 설정 확인
+kubectl get daemonset -n gpu-operator -o yaml | grep -A 5 nodeSelector
+```
+
+**GPU Operator 디버깅:**
+```bash
+# 디버깅 스크립트 실행 (워커 노드에서)
+bash debug_gpu_operator.sh <워커노드이름>
+
+# 또는 마스터 노드에서 직접 확인
+kubectl get pods -n gpu-operator -o wide
+kubectl describe pod -n gpu-operator <파드이름>
+kubectl logs -n gpu-operator <파드이름> --all-containers
+```
+
+**GPU Operator DaemonSet에 nodeSelector 추가 (권장):**
+```bash
+# GPU가 있는 노드만 선택하도록 설정
+kubectl patch daemonset gpu-operator-node-feature-discovery-worker -n gpu-operator --type merge -p '
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "nodeSelector": {
+          "nvidia.com/gpu": "true"
+        }
+      }
+    }
+  }
+}'
+```
+
 ### 로그 확인
 
 ```bash
@@ -94,6 +172,9 @@ sudo systemctl status kubelet
 
 # kubelet 로그
 sudo journalctl -u kubelet -f
+
+# CRI-O 로그
+sudo journalctl -u crio -f
 
 # 에이전트 로그
 sudo tail -f /var/log/k8s-agent.log
