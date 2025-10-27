@@ -189,24 +189,40 @@ if command -v crio &> /dev/null; then
     INSTALLED_VERSION=$(crio --version | head -n1 | awk '{print $NF}')
     echo "✓ CRI-O가 이미 설치되어 있습니다: $INSTALLED_VERSION"
     
-    # 버전이 맞지 않으면 재설치
+    # 버전 확인
     if [[ "$INSTALLED_VERSION" != *"1.30"* ]]; then
-        echo "버전이 맞지 않아 재설치합니다..."
-        systemctl stop crio || true
-        apt-get remove -y cri-o conmon containers-common || true
-        apt-get autoremove -y
-    else
+        echo "⚠️  경고: 설치된 CRI-O 버전($INSTALLED_VERSION)이 권장 버전(1.30)과 다릅니다."
+        echo ""
+        read -p "재설치하시겠습니까? (실행 중인 컨테이너가 모두 중지됩니다) [y/N]: " REINSTALL_CRIO
+        
+        if [[ "$REINSTALL_CRIO" =~ ^[Yy]$ ]]; then
+            echo "CRI-O 재설치 중..."
+            systemctl stop crio || true
+            apt-get remove -y cri-o conmon containers-common || true
+            apt-get autoremove -y
+            # 설치 섹션으로 계속 진행
+        else
+            echo "기존 CRI-O를 사용합니다. 설정만 확인합니다."
+            # 설정 확인으로 이동
+        fi
+    fi
+    
+    # 기존 CRI-O 사용하는 경우 (버전이 맞거나 재설치 거부)
+    if command -v crio &> /dev/null; then
         # 서비스 상태 확인
+        CRIO_RUNNING=false
         if systemctl is-active --quiet crio; then
             echo "✓ CRI-O 서비스가 실행 중입니다."
+            CRIO_RUNNING=true
         else
             echo "CRI-O 서비스를 시작합니다..."
             systemctl start crio
             systemctl enable crio
+            CRIO_RUNNING=true
         fi
-        echo "CRI-O 설치 확인 완료 (설치 생략)"
         
-        # Harbor insecure registry 설정 (이미 있는지 확인)
+        # Harbor insecure registry 설정 확인
+        NEED_RESTART=false
         if [ ! -f /etc/containers/registries.conf.d/crio.conf ]; then
             echo "Harbor insecure registry 설정 추가 중..."
             mkdir -p /etc/containers/registries.conf.d
@@ -214,12 +230,34 @@ if command -v crio &> /dev/null; then
 unqualified-search-registries = ["docker.io"]
 
 [[registry]]
-location = "harbor.bigdata-car.kr:30954"
+location = "harbor.bigdata-car.kr"
 insecure = true
 EOF
             echo "✓ Harbor insecure registry 설정 완료"
-            systemctl restart crio
+            NEED_RESTART=true
+        else
+            echo "✓ Harbor insecure registry 설정이 이미 있습니다."
         fi
+        
+        # 재시작 필요 여부 확인
+        if [ "$NEED_RESTART" = "true" ] && [ "$CRIO_RUNNING" = "true" ]; then
+            echo ""
+            echo "⚠️  설정 변경을 적용하려면 CRI-O를 재시작해야 합니다."
+            echo "   재시작 시 실행 중인 컨테이너가 잠시 중단될 수 있습니다."
+            echo ""
+            read -p "지금 CRI-O를 재시작하시겠습니까? [Y/n]: " RESTART_CRIO
+            
+            if [[ ! "$RESTART_CRIO" =~ ^[Nn]$ ]]; then
+                echo "CRI-O 재시작 중..."
+                systemctl restart crio
+                echo "✓ CRI-O 재시작 완료"
+            else
+                echo "재시작을 건너뛰었습니다. 나중에 수동으로 재시작하세요:"
+                echo "  sudo systemctl restart crio"
+            fi
+        fi
+        
+        echo "✓ CRI-O 설치 확인 완료 (기존 설치 사용)"
         
         # 다음 단계로
         return 0 2>/dev/null || :
@@ -266,7 +304,7 @@ cat > /etc/containers/registries.conf.d/crio.conf <<'EOF'
 unqualified-search-registries = ["docker.io"]
 
 [[registry]]
-location = "harbor.bigdata-car.kr:30954"
+location = "harbor.bigdata-car.kr"
 insecure = true
 EOF
 
